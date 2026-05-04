@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+build/
+dist/
+models/
+
+*.spec
+
+.DS_Store
+Thumbs.db
