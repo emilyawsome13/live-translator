@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live Translator Web</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Sora:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-state="idle">
+    <div class="glow glow-left" aria-hidden="true"></div>
+    <div class="glow glow-right" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="status-chip" id="status-chip">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="status-text">Ready</span>
+      </div>
+    </header>
+
+    <main class="screen">
+      <section class="caption-stage" id="caption-stage">
+        <div class="caption-shell">
+          <div class="caption-stream" id="captions" aria-live="polite">
+            <p class="caption-line caption-line-placeholder">
+              Press Start and allow microphone access. Spanish captions will
+              appear here.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="controlbar">
+      <button class="start-button" id="start-button" type="button">Start</button>
+      <p class="control-note" id="control-note">
+        Free browser version. Chrome or Edge recommended.
+      </p>
+    </footer>
+
+    <div class="ribbon" aria-hidden="true">
+      <div class="ribbon-track"></div>
+      <div class="ribbon-spark ribbon-spark-a"></div>
+      <div class="ribbon-spark ribbon-spark-b"></div>
+      <div class="ribbon-spark ribbon-spark-c"></div>
+    </div>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>

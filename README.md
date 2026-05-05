@@ -2,6 +2,8 @@
 
 Windows desktop app that listens to English on a microphone, transcribes it locally with Whisper, and translates each phrase into Spanish with low delay.
 
+This repo now also includes a free browser version in [docs/index.html](./docs/index.html) that can be hosted on GitHub Pages.
+
 ## What it does
 
 - Uses live microphone input.
@@ -37,3 +39,39 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python app.py --self-test
 dist\LiveTranslator\LiveTranslator.exe --self-test
 ```
+
+## Free Web Version
+
+The `docs` folder contains a browser-based classroom caption screen:
+
+- Large Spanish-only captions
+- Small Start button
+- Smooth live animation while listening and translating
+- Browser microphone noise suppression and transcript filtering
+- No paid backend required
+
+### Local preview
+
+```powershell
+cd docs
+py -m http.server 8000
+```
+
+Then open `http://localhost:8000`.
+
+### Free deploy
+
+Use GitHub Pages from the `main` branch and `/docs` folder.
+
+- GitHub repo setting: `Settings -> Pages`
+- Source: `Deploy from a branch`
+- Branch: `main`
+- Folder: `/docs`
+
+There is no build command and no start command for GitHub Pages because it serves the static HTML, CSS, and JavaScript files directly.
+
+### Browser notes
+
+- Chrome or Edge is recommended for microphone speech recognition.
+- The web version is fully client-side hosted, but it still depends on browser support for live speech recognition.
+- The first translation can take longer while the browser caches the in-browser translation model.
