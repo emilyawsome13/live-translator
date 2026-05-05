@@ -1,0 +1,8 @@
+services:
+  - name: live-translator-web
+    type: web
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start

@@ -3,6 +3,7 @@
 Windows desktop app that listens to English on a microphone, transcribes it locally with Whisper, and translates each phrase into Spanish with low delay.
 
 This repo now also includes a free browser version in [docs/index.html](./docs/index.html) that can be hosted on GitHub Pages.
+It can also be deployed on Render as a standard web service.
 
 ## What it does
 
@@ -75,3 +76,16 @@ There is no build command and no start command for GitHub Pages because it serve
 - Chrome or Edge is recommended for microphone speech recognition.
 - The web version is fully client-side hosted, but it still depends on browser support for live speech recognition.
 - The first translation can take longer while the browser caches the in-browser translation model.
+
+## Render Web Service
+
+This repo now includes a tiny Node server so Render can deploy it as a web service instead of trying to execute the old desktop app.
+
+### Recommended Render settings
+
+- Service type: `Web Service`
+- Runtime: `Node`
+- Build command: `npm install`
+- Start command: `npm start`
+
+The included [render.yaml](./render.yaml) and [package.json](./package.json) match those settings.

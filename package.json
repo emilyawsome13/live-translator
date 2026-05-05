@@ -1,0 +1,13 @@
+{
+  "name": "live-translator-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Render-friendly web wrapper for the Live Translator browser app",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  }
+}
