@@ -51,6 +51,8 @@ The `docs` folder contains a browser-based classroom caption screen:
 - Browser microphone noise suppression and transcript filtering
 - No paid backend required
 
+When hosted on Render through the included Node server, the web app uses server-side translation for faster responses. When hosted as plain static files, it falls back to in-browser translation.
+
 ### Local preview
 
 ```powershell

@@ -1,7 +1,7 @@
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 const MAX_CAPTIONS = 4;
-const PREVIEW_DELAY_MS = 650;
+const PREVIEW_DELAY_MS = 280;
 const VOICE_WINDOW_MS = 1600;
 const RESTART_DELAY_MS = 260;
 
@@ -18,6 +18,9 @@ const state = {
   previewText: "",
   recognition: null,
   manuallyStopping: false,
+  translationBackend: "unknown",
+  backendCheckPromise: null,
+  serverHealthy: false,
   translatorWorker: null,
   translatorReady: false,
   translatorDevice: "",
@@ -25,6 +28,9 @@ const state = {
   nextTranslationId: 0,
   latestPreviewId: 0,
   pendingFinals: 0,
+  previewAbortController: null,
+  lastPreviewSource: "",
+  lastPreviewTranslation: "",
   lastAcceptedText: "",
   lastAcceptedAt: 0,
   micStream: null,
@@ -146,11 +152,11 @@ function shouldAcceptTranscript(text, confidence, isFinal) {
   const charCount = normalized.length;
   const lowConfidence = typeof confidence === "number" && confidence > 0 && confidence < 0.42;
 
-  if (!recentlyHeardVoice() && charCount < 18) {
+  if (!recentlyHeardVoice() && charCount < 10 && wordCount < 2) {
     return false;
   }
 
-  if (!isFinal && charCount < 8) {
+  if (!isFinal && charCount < 5) {
     return false;
   }
 
@@ -259,6 +265,8 @@ function ensureTranslatorWorker() {
     if (message.type === "translation") {
       if (message.kind === "preview") {
         if (message.id === state.latestPreviewId && message.text) {
+          state.lastPreviewSource = normalizeText(message.source || "");
+          state.lastPreviewTranslation = message.text;
           setPreview(message.text);
         }
         return;
@@ -284,18 +292,143 @@ function ensureTranslatorWorker() {
   });
 }
 
-function queueTranslation(text, kind) {
-  ensureTranslatorWorker();
+async function checkServerTranslation() {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 2500);
 
+  try {
+    const response = await fetch("/api/health", {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const payload = await response.json();
+    return Boolean(payload?.ok);
+  } catch (error) {
+    return false;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+async function ensureTranslationBackend() {
+  if (state.translationBackend !== "unknown") {
+    return state.translationBackend;
+  }
+
+  if (!state.backendCheckPromise) {
+    state.backendCheckPromise = (async () => {
+      const serverHealthy = await checkServerTranslation();
+
+      state.serverHealthy = serverHealthy;
+      state.translationBackend = serverHealthy ? "server" : "browser";
+
+      if (state.translationBackend === "browser") {
+        ensureTranslatorWorker();
+        state.translatorWorker.postMessage({ type: "warmup" });
+      } else {
+        state.translatorReady = true;
+      }
+
+      return state.translationBackend;
+    })();
+  }
+
+  return state.backendCheckPromise;
+}
+
+async function translateViaServer(text, signal) {
+  const response = await fetch("/api/translate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ text }),
+    signal,
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "Translation failed.");
+  }
+
+  return typeof payload?.translation === "string" ? payload.translation.trim() : "";
+}
+
+async function queueTranslation(text, kind) {
+  const backend = await ensureTranslationBackend();
   const id = ++state.nextTranslationId;
 
   if (kind === "preview") {
     state.latestPreviewId = id;
+    if (state.previewAbortController) {
+      state.previewAbortController.abort();
+    }
+    state.previewAbortController = new AbortController();
   } else {
     state.pendingFinals += 1;
     setStage("translating", "Translating to Spanish...");
   }
 
+  if (
+    kind === "final" &&
+    normalizeText(text) === state.lastPreviewSource &&
+    state.lastPreviewTranslation
+  ) {
+    state.pendingFinals = Math.max(0, state.pendingFinals - 1);
+    addCaption(state.lastPreviewTranslation);
+    setStage(recentlyHeardVoice() ? "speaking" : "listening");
+    return;
+  }
+
+  if (backend === "server") {
+    try {
+      const translation = await translateViaServer(
+        text,
+        kind === "preview" ? state.previewAbortController?.signal : undefined
+      );
+
+      if (kind === "preview") {
+        if (id === state.latestPreviewId && translation) {
+          state.lastPreviewSource = normalizeText(text);
+          state.lastPreviewTranslation = translation;
+          setPreview(translation);
+        }
+        return;
+      }
+
+      state.pendingFinals = Math.max(0, state.pendingFinals - 1);
+      if (translation) {
+        addCaption(translation);
+      }
+      setStage(recentlyHeardVoice() ? "speaking" : "listening");
+    } catch (error) {
+      if (kind === "preview" && error instanceof Error && error.name === "AbortError") {
+        return;
+      }
+
+      if (kind === "final") {
+        state.pendingFinals = Math.max(0, state.pendingFinals - 1);
+      }
+
+      setStage(
+        "error",
+        error instanceof Error ? error.message : "Translation failed."
+      );
+    }
+    return;
+  }
+
+  ensureTranslatorWorker();
   state.translatorWorker.postMessage({
     type: "translate",
     id,
@@ -307,7 +440,7 @@ function queueTranslation(text, kind) {
 function schedulePreviewTranslation(text) {
   clearPreviewTimer();
 
-  if (!state.running || !state.translatorReady || state.pendingFinals > 0) {
+  if (!state.running || state.pendingFinals > 0) {
     return;
   }
 
@@ -316,7 +449,7 @@ function schedulePreviewTranslation(text) {
       return;
     }
 
-    queueTranslation(text, "preview");
+    void queueTranslation(text, "preview");
   }, PREVIEW_DELAY_MS);
 }
 
@@ -339,7 +472,7 @@ function handleSpeechResult(event) {
         state.lastAcceptedAt = Date.now();
         clearPreviewTimer();
         setPreview("");
-        queueTranslation(transcript, "final");
+        void queueTranslation(transcript, "final");
       }
       continue;
     }
@@ -510,8 +643,8 @@ async function startApp() {
     startButton.disabled = true;
     setStage("loading", "Connecting microphone...");
     await startAudioMeter();
-    ensureTranslatorWorker();
-    state.translatorWorker.postMessage({ type: "warmup" });
+    setStage("loading", "Connecting translator...");
+    await ensureTranslationBackend();
     buildRecognition();
 
     state.running = true;
@@ -519,6 +652,10 @@ async function startApp() {
     startButton.textContent = "Stop";
     renderCaptions();
     state.recognition.start();
+
+    if (state.translationBackend === "server") {
+      controlNote.textContent = "Server translation is active for faster captions.";
+    }
   } catch (error) {
     setStage(
       "error",
@@ -555,6 +692,10 @@ function stopApp() {
   state.pendingFinals = 0;
   state.manuallyStopping = true;
   clearPreviewTimer();
+  if (state.previewAbortController) {
+    state.previewAbortController.abort();
+    state.previewAbortController = null;
+  }
   setPreview("");
 
   if (state.recognition) {
@@ -568,6 +709,8 @@ function stopApp() {
   stopAudioMeter();
   startButton.textContent = "Start";
   startButton.disabled = false;
+  state.lastPreviewSource = "";
+  state.lastPreviewTranslation = "";
   setStage(state.translatorReady ? "ready" : "idle");
   renderCaptions();
 }
